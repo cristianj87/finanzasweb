@@ -7,7 +7,6 @@ import {
   ArrowLeftRight,
   FileBarChart,
   ClipboardCheck,
-  Bot,
   Settings,
   Shield,
 } from 'lucide-react';
@@ -20,7 +19,6 @@ export type NavTab =
   | 'transactions'
   | 'reports'
   | 'tax-prep'
-  | 'assistant'
   | 'settings';
 
 interface SidebarProps {
@@ -81,13 +79,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: ClipboardCheck,
       badge: 'SAT',
       badgeColor: 'bg-blue-100 text-blue-800',
-    },
-    {
-      id: 'assistant' as NavTab,
-      label: 'Mi asistente financiero',
-      icon: Bot,
-      badge: 'IA',
-      badgeColor: 'bg-purple-100 text-purple-800',
     },
     {
       id: 'settings' as NavTab,

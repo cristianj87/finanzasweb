@@ -158,96 +158,36 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
             }
           }
         } else if (ext === 'pdf' || ext === 'jpg' || ext === 'jpeg' || ext === 'png') {
-          // Process PDF or image with Gemini server-side endpoint
-          const base64 = await fileToBase64(file);
-          const mimeType = file.type || (ext === 'pdf' ? 'application/pdf' : 'image/jpeg');
+          // Process PDF or image directly without AI
+          const cleanName = file.name.replace(/\.[^/.]+$/, '');
+          const newDoc: DocumentRecord = {
+            id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            userId: currentUserId,
+            name: file.name,
+            fileType: ext === 'pdf' ? 'pdf' : 'image',
+            category: 'expense_receipt',
+            status: 'needs_review',
+            subtotal: 0,
+            discount: 0,
+            taxIva: 0,
+            taxIvaRetained: 0,
+            taxIsrRetained: 0,
+            total: 0,
+            currency: 'MXN',
+            paymentMethod: 'PUE',
+            paymentForm: '04',
+            description: cleanName,
+            suggestedCategory: 'Gastos Generales',
+            confidence: 100,
+            confidenceExplanation: 'Comprobante registrado. Completa o confirma los datos e importes en la ventana de revisión.',
+            isDuplicate: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
 
-          const res = await fetch('/api/gemini/analyze-document', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              base64Data: base64,
-              mimeType,
-              filename: file.name,
-              userRfc,
-            }),
-          });
-
-          const data = await res.json();
-          if (data.success && data.data) {
-            const extData = data.data;
-
-            // Check duplicate by UUID or amount and date
-            const existingUuid = documents.find(d => d.uuid && extData.uuid && d.uuid.toUpperCase() === extData.uuid.toUpperCase());
-            const isDuplicate = !!existingUuid;
-
-            const newDoc: DocumentRecord = {
-              id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-              userId: currentUserId,
-              name: file.name,
-              fileType: ext === 'pdf' ? 'pdf' : 'image',
-              category: extData.documentType || 'expense_receipt',
-              status: isDuplicate ? 'needs_review' : 'processed',
-              uuid: extData.uuid,
-              rfcIssuer: extData.rfcIssuer,
-              nameIssuer: extData.nameIssuer,
-              rfcReceiver: extData.rfcReceiver,
-              nameReceiver: extData.nameReceiver,
-              issueDate: extData.issueDate,
-              paymentDate: extData.paymentDate,
-              subtotal: extData.subtotal || extData.total || 0,
-              discount: extData.discount || 0,
-              taxIva: extData.taxIva || 0,
-              taxIvaRetained: extData.taxIvaRetained || 0,
-              taxIsrRetained: extData.taxIsrRetained || 0,
-              total: extData.total || 0,
-              currency: extData.currency || 'MXN',
-              paymentMethod: extData.paymentMethod,
-              paymentForm: extData.paymentForm,
-              cfdiUsage: extData.cfdiUsage,
-              description: extData.description || 'Comprobante analizado con IA',
-              suggestedCategory: extData.suggestedCategory || 'Gastos Generales',
-              confidence: extData.confidence || 92,
-              confidenceExplanation: isDuplicate
-                ? 'UUID duplicado detectado: Ya existe un CFDI registrado con este mismo folio fiscal.'
-                : extData.explanation,
-              isDuplicate,
-              payrollDetails: extData.payrollDetails,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            };
-
-            await onAddDocument(newDoc);
-
-            // Automatically create transaction if not duplicate
-            if (!isDuplicate && extData.total > 0) {
-              const txType = (extData.documentType === 'payroll' || extData.documentType === 'invoice_issued') ? 'income' : 'expense';
-              const newTx: Transaction = {
-                id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-                userId: currentUserId,
-                type: txType,
-                date: (extData.paymentDate || extData.issueDate || new Date().toISOString()).slice(0, 10),
-                concept: extData.description || file.name,
-                category: extData.suggestedCategory || 'General',
-                amountGross: extData.subtotal || extData.total || 0,
-                amountNet: extData.total || 0,
-                iva: extData.taxIva || 0,
-                ivaRetained: extData.taxIvaRetained || 0,
-                isrRetained: extData.taxIsrRetained || 0,
-                fiscalClassification: extData.suggestedFiscalClassification || 'personal_expense',
-                fiscalExplanation: extData.explanation,
-                documentId: newDoc.id,
-                documentUuid: newDoc.uuid,
-                paymentMethod: newDoc.paymentMethod,
-                paymentForm: newDoc.paymentForm,
-                status: 'verified',
-                isPaid: true,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              };
-              await onAddTransaction(newTx);
-            }
-          }
+          await onAddDocument(newDoc);
+          setSelectedDoc(newDoc);
+          setReviewModalOpen(true);
         }
       } catch (err) {
         console.error('Error processing file:', file.name, err);
@@ -378,8 +318,8 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
 
           {uploading && (
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 font-medium animate-pulse flex items-center justify-center gap-2">
-              <Sparkles className="w-4 h-4 text-blue-600" />
-              <span>{uploadProgress || 'Analizando documentos con inteligencia artificial...'}</span>
+              <FileText className="w-4 h-4 text-blue-600" />
+              <span>{uploadProgress || 'Procesando documentos y comprobantes...'}</span>
             </div>
           )}
         </div>

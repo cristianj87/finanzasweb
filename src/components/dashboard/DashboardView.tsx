@@ -53,8 +53,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigate,
 }) => {
   const [selectedMonth, setSelectedMonth] = useState<number | 'all'>('all');
-  const [geminiSummary, setGeminiSummary] = useState<string>('');
-  const [loadingSummary, setLoadingSummary] = useState<boolean>(false);
 
   // Filter transactions by Year and Month
   const filteredTransactions = useMemo(() => {
@@ -186,40 +184,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     ].filter(i => i.value > 0);
   }, [stats]);
 
-  // Fetch AI natural-language executive summary from server
-  const fetchAiSummary = async () => {
-    setLoadingSummary(true);
-    try {
-      const monthName = selectedMonth === 'all' ? 'el ejercicio fiscal ' + activeYear : MONTH_NAMES[selectedMonth];
-      const res = await fetch('/api/gemini/dashboard-summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          monthName,
-          monthIncome: stats.totalIncome,
-          monthExpense: stats.totalExpense,
-          yearIncome: stats.totalIncome,
-          personalDeductionsCount: filteredTransactions.filter(t => t.fiscalClassification === 'personal_deduction').length,
-          pendingReviewCount: stats.pendingDocs,
-        }),
-      });
-      const data = await res.json();
-      if (data.summary) {
-        setGeminiSummary(data.summary);
-      }
-    } catch (e) {
-      console.error('Error fetching summary:', e);
-      setGeminiSummary(
-        `Durante ${selectedMonth === 'all' ? 'el ejercicio ' + activeYear : MONTH_NAMES[selectedMonth]} registraste $${stats.totalIncome.toLocaleString('es-MX')} de ingresos y $${stats.totalExpense.toLocaleString('es-MX')} de gastos. Tienes ${stats.pendingDocs} documentos o movimientos pendientes de revisión.`
-      );
-    } finally {
-      setLoadingSummary(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAiSummary();
-  }, [selectedMonth, activeYear, transactions.length, documents.length]);
+  // Deterministic financial summary of the active period
+  const periodSummary = useMemo(() => {
+    const periodName = selectedMonth === 'all' ? `el ejercicio fiscal ${activeYear}` : MONTH_NAMES[selectedMonth];
+    const personalDedsCount = filteredTransactions.filter(t => t.fiscalClassification === 'personal_deduction').length;
+    return `Durante ${periodName} registraste $${stats.totalIncome.toLocaleString('es-MX', { minimumFractionDigits: 2 })} de ingresos y $${stats.totalExpense.toLocaleString('es-MX', { minimumFractionDigits: 2 })} de gastos. Se han identificado ${personalDedsCount} comprobantes como posibles deducciones personales y tienes ${stats.pendingDocs} documentos pendientes de revisión.`;
+  }, [selectedMonth, activeYear, stats, filteredTransactions]);
 
   return (
     <div className="space-y-6">
@@ -252,28 +222,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* AI Plain Language Summary */}
+      {/* Deterministic Executive Summary */}
       <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-5 shadow-md relative overflow-hidden">
         <div className="absolute right-0 top-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="flex items-start gap-3 relative z-10">
           <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <Sparkles className="w-5 h-5 text-emerald-300" />
+            <CheckCircle2 className="w-5 h-5 text-emerald-300" />
           </div>
           <div className="flex-1">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-blue-300">
-                Resumen Inteligente en Lenguaje Sencillo (Gemini AI)
-              </h2>
-              <button
-                onClick={fetchAiSummary}
-                disabled={loadingSummary}
-                className="text-[11px] text-blue-200 hover:text-white underline"
-              >
-                {loadingSummary ? 'Actualizando...' : 'Actualizar'}
-              </button>
-            </div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-blue-300">
+              Resumen Financiero del Período
+            </h2>
             <p className="text-sm text-slate-100 mt-1.5 leading-relaxed font-normal">
-              {geminiSummary || (loadingSummary ? 'Analizando tus movimientos fiscales...' : 'Cargando resumen financiero...')}
+              {periodSummary}
             </p>
           </div>
         </div>

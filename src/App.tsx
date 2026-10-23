@@ -26,7 +26,6 @@ import { ExpensesView } from './components/expenses/ExpensesView';
 import { TransactionsView } from './components/transactions/TransactionsView';
 import { ReportsView } from './components/reports/ReportsView';
 import { TaxPrepView } from './components/tax-prep/TaxPrepView';
-import { AssistantView } from './components/assistant/AssistantView';
 import { SettingsView } from './components/settings/SettingsView';
 
 const LOCAL_STORAGE_KEY_PROFILE = 'mi_control_fiscal_profile';
@@ -353,15 +352,6 @@ export default function App() {
 
           {activeTab === 'tax-prep' && (
             <TaxPrepView
-              transactions={transactions}
-              documents={documents}
-              profile={profile}
-              activeYear={activeYear}
-            />
-          )}
-
-          {activeTab === 'assistant' && (
-            <AssistantView
               transactions={transactions}
               documents={documents}
               profile={profile}

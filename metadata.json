@@ -1,6 +1,6 @@
 {
   "name": "Mi Control Fiscal",
-  "description": "Sistema inteligente de control financiero y fiscal personal para personas físicas en México.",
+  "description": "Sistema contable y de control financiero y fiscal personal para personas físicas en México.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }
