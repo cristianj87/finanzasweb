@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // User profile document
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false; // Blanket user listing is forbidden
+      allow create: if isOwner(userId)
+        && incoming().id == userId
+        && incoming().email is string
+        && incoming().email.size() <= 150;
+      allow update: if isOwner(userId)
+        && incoming().id == existing().id;
+      allow delete: if isOwner(userId);
+
+      // Tax profiles subcollection
+      match /taxProfiles/{profileId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(profileId)
+          && incoming().userId == userId
+          && incoming().taxName is string
+          && incoming().taxName.size() <= 200
+          && incoming().fiscalYear is number
+          && incoming().regimes is list;
+        allow update: if isOwner(userId)
+          && isValidId(profileId)
+          && incoming().userId == existing().userId
+          && incoming().taxName is string
+          && incoming().taxName.size() <= 200;
+        allow delete: if isOwner(userId);
+      }
+
+      // Documents subcollection
+      match /documents/{documentId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(documentId)
+          && incoming().userId == userId
+          && incoming().name is string
+          && incoming().name.size() <= 255
+          && incoming().category is string
+          && incoming().status is string
+          && incoming().total is number;
+        allow update: if isOwner(userId)
+          && isValidId(documentId)
+          && incoming().userId == existing().userId
+          && incoming().total is number;
+        allow delete: if isOwner(userId);
+      }
+
+      // Transactions subcollection
+      match /transactions/{transactionId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(transactionId)
+          && incoming().userId == userId
+          && incoming().type is string
+          && (incoming().type == 'income' || incoming().type == 'expense')
+          && incoming().concept is string
+          && incoming().concept.size() <= 300
+          && incoming().amountGross is number
+          && incoming().amountNet is number;
+        allow update: if isOwner(userId)
+          && isValidId(transactionId)
+          && incoming().userId == existing().userId
+          && incoming().amountGross is number
+          && incoming().amountNet is number;
+        allow delete: if isOwner(userId);
+      }
+
+      // Audit logs subcollection
+      match /auditLogs/{logId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(logId)
+          && incoming().userId == userId
+          && incoming().action is string
+          && incoming().action.size() <= 100;
+        allow update, delete: if false; // Audit logs are immutable
+      }
+    }
+  }
+}

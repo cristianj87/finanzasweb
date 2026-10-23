@@ -1,0 +1,138 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Perfil principal del usuario contribuyente",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "email"]
+    },
+    "TaxProfile": {
+      "title": "TaxProfile",
+      "description": "Configuración y perfil fiscal del contribuyente ante el SAT",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "taxName": { "type": "string", "maxLength": 200 },
+        "rfc": { "type": "string", "maxLength": 15 },
+        "fiscalYear": { "type": "number" },
+        "regimes": { "type": "array" },
+        "hasPayroll": { "type": "boolean" },
+        "issuesInvoices": { "type": "boolean" },
+        "makesProvisionalPayments": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "taxName", "fiscalYear", "regimes"]
+    },
+    "Document": {
+      "title": "Document",
+      "description": "Comprobante fiscal o financiero procesado (CFDI XML, PDF, imagen)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string", "maxLength": 255 },
+        "fileType": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string" },
+        "uuid": { "type": "string", "maxLength": 64 },
+        "rfcIssuer": { "type": "string", "maxLength": 20 },
+        "nameIssuer": { "type": "string", "maxLength": 255 },
+        "rfcReceiver": { "type": "string", "maxLength": 20 },
+        "nameReceiver": { "type": "string", "maxLength": 255 },
+        "issueDate": { "type": "string", "maxLength": 50 },
+        "paymentDate": { "type": "string", "maxLength": 50 },
+        "subtotal": { "type": "number" },
+        "discount": { "type": "number" },
+        "taxIva": { "type": "number" },
+        "taxIvaRetained": { "type": "number" },
+        "taxIsrRetained": { "type": "number" },
+        "total": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 10 },
+        "paymentMethod": { "type": "string", "maxLength": 20 },
+        "paymentForm": { "type": "string", "maxLength": 20 },
+        "cfdiUsage": { "type": "string", "maxLength": 20 },
+        "description": { "type": "string", "maxLength": 500 },
+        "suggestedCategory": { "type": "string", "maxLength": 100 },
+        "confidence": { "type": "number" },
+        "confidenceExplanation": { "type": "string", "maxLength": 500 },
+        "storageUrl": { "type": "string", "maxLength": 1000 },
+        "isDuplicate": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "name", "category", "status", "total"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Movimiento individual de ingreso o gasto clasificado",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string" },
+        "date": { "type": "string", "maxLength": 50 },
+        "concept": { "type": "string", "maxLength": 300 },
+        "category": { "type": "string", "maxLength": 100 },
+        "amountGross": { "type": "number" },
+        "amountNet": { "type": "number" },
+        "iva": { "type": "number" },
+        "ivaRetained": { "type": "number" },
+        "isrRetained": { "type": "number" },
+        "fiscalRegime": { "type": "string", "maxLength": 50 },
+        "fiscalClassification": { "type": "string", "maxLength": 100 },
+        "fiscalExplanation": { "type": "string", "maxLength": 500 },
+        "documentId": { "type": "string", "maxLength": 128 },
+        "paymentMethod": { "type": "string", "maxLength": 20 },
+        "status": { "type": "string", "maxLength": 50 },
+        "isPaid": { "type": "boolean" },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "type", "date", "concept", "category", "amountGross", "amountNet"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Registro de auditoría de acciones sensibles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "action": { "type": "string", "maxLength": 100 },
+        "details": { "type": "string", "maxLength": 500 },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "userId", "action", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Documento de perfil base del usuario"
+    },
+    "/users/{userId}/taxProfiles/{profileId}": {
+      "schema": "TaxProfile",
+      "description": "Configuración de regímenes y ejercicio fiscal del usuario"
+    },
+    "/users/{userId}/documents/{documentId}": {
+      "schema": "Document",
+      "description": "Comprobantes fiscales y recibos subidos por el usuario"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Ingresos y egresos clasificados para el control financiero y fiscal"
+    },
+    "/users/{userId}/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Bitácora de operaciones y cambios de estado"
+    }
+  }
+}
