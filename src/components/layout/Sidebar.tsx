@@ -1,121 +1,131 @@
 import React from 'react';
 import {
   LayoutDashboard,
-  FolderOpen,
+  FileText,
   TrendingUp,
   Receipt,
-  ArrowLeftRight,
-  FileBarChart,
-  ClipboardCheck,
+  ListOrdered,
+  Calculator,
+  BarChart3,
   Settings,
-  Shield,
+  ShieldCheck,
+  AlertTriangle,
 } from 'lucide-react';
 
-export type NavTab =
+export type NavigationTab =
   | 'dashboard'
   | 'documents'
   | 'income'
   | 'expenses'
   | 'transactions'
-  | 'reports'
   | 'tax-prep'
+  | 'reports'
   | 'settings';
 
 interface SidebarProps {
-  currentTab: NavTab;
-  onTabChange: (tab: NavTab) => void;
-  pendingReviewsCount?: number;
-  personalDeductionsCount?: number;
+  currentTab: NavigationTab;
+  onSelectTab: (tab: NavigationTab) => void;
+  pendingReviewCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
-  onTabChange,
-  pendingReviewsCount = 0,
-  personalDeductionsCount = 0,
+  onSelectTab,
+  pendingReviewCount = 0,
 }) => {
   const menuItems = [
     {
-      id: 'dashboard' as NavTab,
-      label: 'Dashboard',
+      id: 'dashboard' as NavigationTab,
+      label: 'Panel General',
       icon: LayoutDashboard,
       badge: null,
     },
     {
-      id: 'documents' as NavTab,
-      label: 'Mis documentos',
-      icon: FolderOpen,
-      badge: pendingReviewsCount > 0 ? `${pendingReviewsCount} por validar` : null,
-      badgeColor: 'bg-amber-100 text-amber-800',
+      id: 'documents' as NavigationTab,
+      label: 'Bóveda de Documentos',
+      icon: FileText,
+      badge: pendingReviewCount > 0 ? pendingReviewCount : null,
+      badgeColor: 'bg-amber-100 text-amber-800 border-amber-200',
     },
     {
-      id: 'income' as NavTab,
-      label: 'Mis ingresos',
+      id: 'income' as NavigationTab,
+      label: 'Ingresos y Nómina',
       icon: TrendingUp,
       badge: null,
     },
     {
-      id: 'expenses' as NavTab,
-      label: 'Mis gastos',
+      id: 'expenses' as NavigationTab,
+      label: 'Gastos y Deducciones',
       icon: Receipt,
-      badge: personalDeductionsCount > 0 ? `${personalDeductionsCount} deducibles` : null,
-      badgeColor: 'bg-emerald-100 text-emerald-800',
-    },
-    {
-      id: 'transactions' as NavTab,
-      label: 'Movimientos',
-      icon: ArrowLeftRight,
       badge: null,
     },
     {
-      id: 'reports' as NavTab,
-      label: 'Reportes',
-      icon: FileBarChart,
+      id: 'transactions' as NavigationTab,
+      label: 'Libro de Movimientos',
+      icon: ListOrdered,
       badge: null,
     },
     {
-      id: 'tax-prep' as NavTab,
-      label: 'Preparar declaración anual',
-      icon: ClipboardCheck,
-      badge: 'SAT',
-      badgeColor: 'bg-blue-100 text-blue-800',
+      id: 'tax-prep' as NavigationTab,
+      label: 'Preparación Fiscal SAT',
+      icon: Calculator,
+      badge: 'Art. 151',
+      badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
     },
     {
-      id: 'settings' as NavTab,
-      label: 'Configuración',
+      id: 'reports' as NavigationTab,
+      label: 'Reportes y Cierres',
+      icon: BarChart3,
+      badge: null,
+    },
+    {
+      id: 'settings' as NavigationTab,
+      label: 'Perfil y Regímenes',
       icon: Settings,
       badge: null,
     },
   ];
 
   return (
-    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 min-h-[calc(100vh-4rem)]">
-      <div className="p-4 space-y-1 flex-1">
-        <div className="px-3 py-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-          Módulos Principales
+    <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col shrink-0">
+      <div className="p-4 border-b border-slate-100">
+        <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+          <div className="flex items-center space-x-2 text-xs font-semibold text-slate-700">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Almacenamiento Local Seguro</span>
+          </div>
+          <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+            Tus datos fiscales se procesan de manera privada en tu navegador.
+          </p>
         </div>
+      </div>
 
-        {menuItems.map(item => {
+      <nav className="p-3 space-y-1 flex-1 overflow-y-auto">
+        {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
           return (
             <button
               key={item.id}
-              onClick={() => onTabChange(item.id)}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              onClick={() => onSelectTab(item.id)}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 isActive
-                  ? 'bg-blue-800 text-white shadow-sm shadow-blue-800/20'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  ? 'bg-blue-50 text-blue-800 font-semibold shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
               }`}
             >
               <div className="flex items-center space-x-3">
-                <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-300' : 'text-slate-500'}`} />
-                <span className="truncate">{item.label}</span>
+                <Icon
+                  className={`w-4 h-4 transition-colors ${
+                    isActive ? 'text-blue-700' : 'text-slate-400 group-hover:text-slate-600'
+                  }`}
+                />
+                <span>{item.label}</span>
               </div>
               {item.badge && (
                 <span
-                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                    isActive ? 'bg-blue-950 text-emerald-300' : item.badgeColor
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                    item.badgeColor || 'bg-slate-100 text-slate-700 border-slate-200'
                   }`}
                 >
                   {item.badge}
@@ -124,14 +134,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           );
         })}
-      </div>
+      </nav>
 
-      {/* Safety notice disclaimer card */}
-      <div className="p-4 border-t border-slate-200 bg-slate-50/70">
-        <div className="flex items-start space-x-2 text-[11px] text-slate-500 leading-relaxed">
-          <Shield className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-          <span>Tus comprobantes e información financiera se aíslan de forma segura bajo tu cuenta de usuario.</span>
-        </div>
+      {/* Footer Legal Notice */}
+      <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+        <p className="text-[11px] text-slate-500 leading-tight">
+          <strong>Aviso legal:</strong> Herramienta de apoyo y cálculo referencial conforme a la LISR. No sustituye la asesoría de un contador público certificado.
+        </p>
       </div>
     </aside>
   );

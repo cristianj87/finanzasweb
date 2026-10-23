@@ -83,7 +83,7 @@ export function parseCFDIXML(xmlContent: string, currentUserId: string, userRfc?
     }
     const fullDescription = descriptions.join('; ') || 'Concepto CFDI';
 
-    // Impuestos (Traslados y Retenciones)
+    // Impuestos
     let ivaTrasladado = 0;
     let isrRetenido = 0;
     let ivaRetenido = 0;
@@ -127,12 +127,11 @@ export function parseCFDIXML(xmlContent: string, currentUserId: string, userRfc?
     const cleanReceiverRfc = rfcReceptor.trim().toUpperCase();
 
     const isIssuer = cleanUserRfc && cleanIssuerRfc === cleanUserRfc;
-    const isReceiver = cleanUserRfc && cleanReceiverRfc === cleanUserRfc;
 
     if (nominaEl || tipoDeComprobante === 'N') {
       category = 'payroll';
       suggestedTransactionType = 'income';
-      suggestedFiscalClassification = 'personal_expense'; // Sueldos y salarios
+      suggestedFiscalClassification = 'personal_expense';
 
       const percepcionesEl = xmlDoc.getElementsByTagName('nomina12:Percepciones')[0] || xmlDoc.getElementsByTagName('Percepciones')[0];
       const deduccionesEl = xmlDoc.getElementsByTagName('nomina12:Deducciones')[0] || xmlDoc.getElementsByTagName('Deducciones')[0];
@@ -179,22 +178,19 @@ export function parseCFDIXML(xmlContent: string, currentUserId: string, userRfc?
     } else if (tipoDeComprobante === 'P') {
       category = 'payment_complement';
       suggestedTransactionType = 'neutral';
-      explanation = 'Complemento de recepción de pagos (REP). Se relaciona con el CFDI base para no duplicar el importe facturado.';
+      explanation = 'Complemento de recepción de pagos (REP).';
     } else if (tipoDeComprobante === 'E') {
       category = 'expense_receipt';
       suggestedTransactionType = 'expense';
-      explanation = 'Nota de crédito o egreso que reduce saldos de operaciones.';
+      explanation = 'Nota de crédito o egreso.';
     } else if (isIssuer) {
-      // El usuario es quien emitió la factura -> Ingreso
       category = 'invoice_issued';
       suggestedTransactionType = 'income';
-      explanation = `Factura emitida a ${nombreReceptor}. Ingreso para tu actividad profesional o empresarial.`;
+      explanation = `Factura emitida a ${nombreReceptor}. Ingreso para tu actividad.`;
     } else {
-      // El usuario recibió la factura -> Gasto
       category = 'invoice_received';
       suggestedTransactionType = 'expense';
 
-      // Análisis fiscal del gasto
       const isPersonalDeductionUsage = [
         'D01', 'D02', 'D03', 'D04', 'D05', 'D06', 'D07', 'D08', 'D09', 'D10',
       ].includes(usoCFDI);
@@ -204,17 +200,17 @@ export function parseCFDIXML(xmlContent: string, currentUserId: string, userRfc?
       if (isPersonalDeductionUsage) {
         if (isPaidByCash && ['D01', 'D02', 'D04', 'D08'].includes(usoCFDI)) {
           suggestedFiscalClassification = 'non_deducible';
-          explanation = `Uso CFDI "${usoCFDI}" corresponde a deducción personal, pero se pagó en Efectivo (01). La ley del ISR exige pago mediante transferencia, tarjeta o cheque nominativo para ser deducible.`;
+          explanation = `Uso CFDI "${usoCFDI}" corresponde a deducción personal, pero se pagó en Efectivo (01). La ley exige pago electrónico para ser deducible.`;
         } else {
           suggestedFiscalClassification = 'personal_deduction';
-          explanation = `Posible deducción personal anual (Art. 151 LISR) con Uso CFDI ${usoCFDI} (${getUsageLabel(usoCFDI)}). Recuerda que debe cumplir los requisitos de la declaración anual.`;
+          explanation = `Posible deducción personal anual (Art. 151 LISR) con Uso CFDI ${usoCFDI}.`;
         }
       } else if (['G01', 'G02', 'G03', 'I01', 'I02', 'I03', 'I04', 'I08'].includes(usoCFDI)) {
         suggestedFiscalClassification = 'business_deduction';
-        explanation = `Gasto operativo con Uso CFDI ${usoCFDI} (${getUsageLabel(usoCFDI)}). Puede ser deducción autorizada si está estrictamente relacionado con tu actividad profesional o empresarial.`;
+        explanation = `Gasto operativo con Uso CFDI ${usoCFDI}. Puede ser deducción autorizada si está relacionado con tu actividad.`;
       } else {
         suggestedFiscalClassification = 'personal_expense';
-        explanation = 'Gasto general registrado para tu control financiero personal.';
+        explanation = 'Gasto general registrado para control financiero personal.';
       }
     }
 
@@ -243,7 +239,7 @@ export function parseCFDIXML(xmlContent: string, currentUserId: string, userRfc?
       cfdiUsage: usoCFDI,
       description: fullDescription.slice(0, 450),
       suggestedCategory: getCategoryFromConcepts(fullDescription, category),
-      confidence: 99,
+      confidence: 100,
       confidenceExplanation: 'Datos extraídos matemáticamente de la estructura oficial XML CFDI.',
       payrollDetails,
       createdAt: new Date().toISOString(),
@@ -267,27 +263,6 @@ export function parseCFDIXML(xmlContent: string, currentUserId: string, userRfc?
       explanation: 'No se pudo leer la estructura XML.',
     };
   }
-}
-
-function getUsageLabel(uso: string): string {
-  const map: Record<string, string> = {
-    D01: 'Honorarios médicos, dentales y gastos hospitalarios',
-    D02: 'Gastos de funerales',
-    D03: 'Donativos',
-    D04: 'Intereses reales efectivamente pagados por créditos hipotecarios',
-    D05: 'Aportaciones voluntarias al SAR / Retiro',
-    D06: 'Primas por seguros de gastos médicos',
-    D07: 'Gastos de transportación escolar obligatoria',
-    D08: 'Pagos por servicios educativos (Colegiaturas)',
-    D10: 'Pagos por servicios de salud mental o nutrición',
-    G01: 'Adquisición de mercancías',
-    G02: 'Devoluciones, descuentos o bonificaciones',
-    G03: 'Gastos en general',
-    P01: 'Por definir',
-    CP01: 'Pagos',
-    S01: 'Sin efectos fiscales',
-  };
-  return map[uso] || uso;
 }
 
 export function getCategoryFromConcepts(concept: string, docType: DocumentType): string {

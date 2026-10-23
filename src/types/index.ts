@@ -120,16 +120,15 @@ export interface DocumentRecord {
   taxIsrRetained: number;
   total: number;
   currency: string;
-  paymentMethod?: string; // PUE, PPD
-  paymentForm?: string;   // 01 Efectivo, 03 Transferencia, 04 Tarjeta...
-  cfdiUsage?: string;     // G03 Gastos en general, D01 Honorarios médicos, etc.
+  paymentMethod?: string;
+  paymentForm?: string;
+  cfdiUsage?: string;
   description: string;
   suggestedCategory: string;
-  confidence: number;     // 0 a 100
+  confidence: number;
   confidenceExplanation?: string;
   storageUrl?: string;
   isDuplicate?: boolean;
-  // Campos específicos de nómina si aplica:
   payrollDetails?: {
     employerName: string;
     employerRfc: string;
@@ -181,18 +180,4 @@ export interface Transaction {
   isDemo?: boolean;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface UserStats {
-  totalIncomeYear: number;
-  totalExpenseYear: number;
-  payrollIncome: number;
-  professionalIncome: number;
-  isrRetained: number;
-  isrProvisionalPaid: number;
-  totalPersonalExpenses: number;
-  totalPersonalDeductions: number;
-  totalBusinessDeductions: number;
-  availableBalance: number;
-  pendingReviewCount: number;
 }

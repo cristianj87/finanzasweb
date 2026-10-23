@@ -1,489 +1,386 @@
 import React, { useState, useRef } from 'react';
-import { DocumentRecord, DocumentType, DocumentStatus, FiscalClassification, Transaction } from '../../types';
-import { parseCFDIXML } from '../../lib/cfdi-parser';
 import {
   UploadCloud,
   FileText,
-  FileCode,
-  Image,
   CheckCircle2,
-  AlertCircle,
+  AlertTriangle,
   Clock,
+  Filter,
+  Search,
+  ExternalLink,
   Trash2,
   Eye,
-  Sparkles,
-  Search,
-  Filter,
-  ArrowRight,
   ShieldAlert,
-  Info,
-  Check,
-  X,
-  ExternalLink,
+  HelpCircle,
+  FileCode,
+  Tag,
+  DollarSign,
+  Calendar,
+  Building,
 } from 'lucide-react';
+import { DocumentRecord, Transaction, TaxProfile, DocumentType, FiscalClassification } from '../../types';
+import { parseCFDIXML } from '../../lib/cfdi-parser';
 
 interface DocumentsViewProps {
   documents: DocumentRecord[];
   transactions: Transaction[];
-  currentUserId: string;
-  userRfc?: string;
-  onAddDocument: (doc: DocumentRecord) => Promise<void>;
-  onUpdateDocument: (doc: DocumentRecord) => Promise<void>;
-  onDeleteDocument: (docId: string) => Promise<void>;
-  onAddTransaction: (tx: Transaction) => Promise<void>;
+  profile: TaxProfile;
+  activeYear: number;
+  onAddDocument: (doc: DocumentRecord, tx?: Transaction) => void;
+  onDeleteDocument: (id: string) => void;
+  onUpdateDocument: (doc: DocumentRecord) => void;
 }
 
 export const DocumentsView: React.FC<DocumentsViewProps> = ({
   documents,
   transactions,
-  currentUserId,
-  userRfc,
+  profile,
+  activeYear,
   onAddDocument,
-  onUpdateDocument,
   onDeleteDocument,
-  onAddTransaction,
+  onUpdateDocument,
 }) => {
-  const [isDragging, setIsDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<string>('');
-  const [selectedDoc, setSelectedDoc] = useState<DocumentRecord | null>(null);
-  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const [filterType, setFilterType] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDoc, setSelectedDoc] = useState<DocumentRecord | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Filtered documents
-  const filteredDocuments = documents.filter(doc => {
-    if (filterType !== 'all' && doc.category !== filterType) return false;
-    if (filterStatus !== 'all' && doc.status !== filterStatus) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchName = doc.name.toLowerCase().includes(q);
-      const matchIssuer = (doc.nameIssuer || '').toLowerCase().includes(q);
-      const matchRfc = (doc.rfcIssuer || '').toLowerCase().includes(q);
-      const matchDesc = (doc.description || '').toLowerCase().includes(q);
-      const matchUuid = (doc.uuid || '').toLowerCase().includes(q);
-      if (!matchName && !matchIssuer && !matchRfc && !matchDesc && !matchUuid) return false;
-    }
-    return true;
-  });
-
-  // Handle files
-  const processFiles = async (files: FileList | File[]) => {
-    setUploading(true);
-    const fileArray = Array.from(files);
-
-    for (let i = 0; i < fileArray.length; i++) {
-      const file = fileArray[i];
-      setUploadProgress(`Procesando archivo ${i + 1} de ${fileArray.length}: ${file.name}`);
-
-      try {
-        const ext = file.name.split('.').pop()?.toLowerCase();
-
-        if (ext === 'xml') {
-          // Process deterministic XML CFDI
-          const xmlText = await file.text();
-          const parsed = parseCFDIXML(xmlText, currentUserId, userRfc);
-
-          if (parsed.isValid && parsed.document) {
-            // Check for duplicate UUID in documents
-            const existingUuid = documents.find(d => d.uuid && parsed.document.uuid && d.uuid.toUpperCase() === parsed.document.uuid.toUpperCase());
-            const isDuplicate = !!existingUuid;
-
-            const newDoc: DocumentRecord = {
-              id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-              userId: currentUserId,
-              name: file.name,
-              fileType: 'xml',
-              category: parsed.document.category || 'invoice_received',
-              status: isDuplicate ? 'needs_review' : 'processed',
-              uuid: parsed.document.uuid,
-              rfcIssuer: parsed.document.rfcIssuer,
-              nameIssuer: parsed.document.nameIssuer,
-              rfcReceiver: parsed.document.rfcReceiver,
-              nameReceiver: parsed.document.nameReceiver,
-              issueDate: parsed.document.issueDate,
-              paymentDate: parsed.document.paymentDate,
-              subtotal: parsed.document.subtotal || 0,
-              discount: parsed.document.discount || 0,
-              taxIva: parsed.document.taxIva || 0,
-              taxIvaRetained: parsed.document.taxIvaRetained || 0,
-              taxIsrRetained: parsed.document.taxIsrRetained || 0,
-              total: parsed.document.total || 0,
-              currency: parsed.document.currency || 'MXN',
-              paymentMethod: parsed.document.paymentMethod,
-              paymentForm: parsed.document.paymentForm,
-              cfdiUsage: parsed.document.cfdiUsage,
-              description: parsed.document.description || '',
-              suggestedCategory: parsed.document.suggestedCategory || 'Gastos Generales',
-              confidence: parsed.document.confidence || 98,
-              confidenceExplanation: isDuplicate
-                ? `¡UUID detectado en otro comprobante! Podría tratarse de un archivo duplicado o representación PDF del mismo CFDI.`
-                : parsed.document.confidenceExplanation,
-              isDuplicate,
-              payrollDetails: parsed.document.payrollDetails,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            };
-
-            await onAddDocument(newDoc);
-
-            // If not duplicate, automatically propose transaction
-            if (!isDuplicate && parsed.suggestedTransactionType !== 'neutral') {
-              const newTx: Transaction = {
-                id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-                userId: currentUserId,
-                type: parsed.suggestedTransactionType,
-                date: (parsed.document.paymentDate || parsed.document.issueDate || new Date().toISOString()).slice(0, 10),
-                concept: parsed.document.description || file.name,
-                category: parsed.document.suggestedCategory || 'General',
-                amountGross: parsed.document.subtotal || parsed.document.total || 0,
-                amountNet: parsed.document.total || 0,
-                iva: parsed.document.taxIva || 0,
-                ivaRetained: parsed.document.taxIvaRetained || 0,
-                isrRetained: parsed.document.taxIsrRetained || 0,
-                fiscalClassification: parsed.suggestedFiscalClassification,
-                fiscalExplanation: parsed.explanation,
-                documentId: newDoc.id,
-                documentUuid: newDoc.uuid,
-                paymentMethod: newDoc.paymentMethod,
-                paymentForm: newDoc.paymentForm,
-                status: 'verified',
-                isPaid: true,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              };
-              await onAddTransaction(newTx);
-            }
-          }
-        } else if (ext === 'pdf' || ext === 'jpg' || ext === 'jpeg' || ext === 'png') {
-          // Process PDF or image directly without AI
-          const cleanName = file.name.replace(/\.[^/.]+$/, '');
-          const newDoc: DocumentRecord = {
-            id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            userId: currentUserId,
-            name: file.name,
-            fileType: ext === 'pdf' ? 'pdf' : 'image',
-            category: 'expense_receipt',
-            status: 'needs_review',
-            subtotal: 0,
-            discount: 0,
-            taxIva: 0,
-            taxIvaRetained: 0,
-            taxIsrRetained: 0,
-            total: 0,
-            currency: 'MXN',
-            paymentMethod: 'PUE',
-            paymentForm: '04',
-            description: cleanName,
-            suggestedCategory: 'Gastos Generales',
-            confidence: 100,
-            confidenceExplanation: 'Comprobante registrado. Completa o confirma los datos e importes en la ventana de revisión.',
-            isDuplicate: false,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-
-          await onAddDocument(newDoc);
-          setSelectedDoc(newDoc);
-          setReviewModalOpen(true);
-        }
-      } catch (err) {
-        console.error('Error processing file:', file.name, err);
-      }
-    }
-
-    setUploading(false);
-    setUploadProgress('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        const base64 = result.split(',')[1];
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(true);
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
   };
 
-  const handleDragLeave = () => {
-    setIsDragging(false);
+  const processFile = async (file: File) => {
+    setUploadError(null);
+    setUploadSuccess(null);
+
+    const isXml = file.name.toLowerCase().endsWith('.xml');
+    if (!isXml) {
+      setUploadError('Por el momento el análisis estructurado directo procesa archivos XML de CFDI (versiones 3.3 y 4.0).');
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const parseResult = parseCFDIXML(text, profile.userId, profile.rfc);
+
+      if (!parseResult.isValid || !parseResult.document.uuid) {
+        setUploadError(parseResult.error || 'El archivo XML no pudo ser procesado como CFDI válido.');
+        return;
+      }
+
+      // Duplicate check by UUID
+      const existing = documents.find((d) => d.uuid === parseResult.document.uuid);
+      if (existing) {
+        setUploadError(`El comprobante fiscal con UUID ${parseResult.document.uuid} ya se encuentra registrado en el sistema.`);
+        return;
+      }
+
+      const newDoc: DocumentRecord = {
+        ...(parseResult.document as DocumentRecord),
+        id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        name: file.name,
+        fileType: 'xml',
+        status: parseResult.suggestedFiscalClassification === 'needs_review' ? 'needs_review' : 'processed',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Create linked transaction
+      let newTx: Transaction | undefined;
+      if (parseResult.suggestedTransactionType !== 'neutral') {
+        newTx = {
+          id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          userId: profile.userId,
+          type: parseResult.suggestedTransactionType,
+          date: (newDoc.paymentDate || newDoc.issueDate || new Date().toISOString()).slice(0, 10),
+          concept: newDoc.description || file.name,
+          category: newDoc.suggestedCategory || 'General',
+          amountGross: newDoc.subtotal || newDoc.total,
+          amountNet: newDoc.total,
+          iva: newDoc.taxIva || 0,
+          ivaRetained: newDoc.taxIvaRetained || 0,
+          isrRetained: newDoc.taxIsrRetained || 0,
+          fiscalClassification: parseResult.suggestedFiscalClassification,
+          fiscalExplanation: parseResult.explanation,
+          documentId: newDoc.id,
+          documentUuid: newDoc.uuid,
+          paymentMethod: newDoc.paymentMethod,
+          paymentForm: newDoc.paymentForm,
+          status: 'verified',
+          isPaid: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+
+      onAddDocument(newDoc, newTx);
+      setUploadSuccess(`Archivo ${file.name} procesado y clasificado exitosamente.`);
+    } catch (err) {
+      setUploadError(`Error leyendo el archivo: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      processFiles(e.dataTransfer.files);
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      Array.from(e.dataTransfer.files).forEach((file) => processFile(file));
     }
   };
 
-  const handleOpenReview = (doc: DocumentRecord) => {
-    setSelectedDoc({ ...doc });
-    setReviewModalOpen(true);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      Array.from(e.target.files).forEach((file) => processFile(file));
+      e.target.value = '';
+    }
   };
 
-  const handleSaveReview = async () => {
-    if (!selectedDoc) return;
-    await onUpdateDocument(selectedDoc);
-    setReviewModalOpen(false);
-  };
-
-  const getCategoryLabel = (cat: DocumentType): string => {
-    const map: Record<DocumentType, string> = {
-      payroll: 'Recibo de Nómina',
-      invoice_received: 'Factura Recibida',
-      invoice_issued: 'Factura Emitida',
-      expense_receipt: 'Comprobante de Gasto',
-      payment_receipt: 'Comprobante de Pago',
-      payment_complement: 'Complemento de Pago (REP)',
-      bank_statement: 'Estado de Cuenta',
-      other: 'Otro Fiscal',
-    };
-    return map[cat] || cat;
-  };
+  // Filtered documents
+  const filteredDocuments = documents.filter((doc) => {
+    if (filterType !== 'all' && doc.category !== filterType) {
+      return false;
+    }
+    if (searchTerm) {
+      const q = searchTerm.toLowerCase();
+      const matchName = doc.name.toLowerCase().includes(q);
+      const matchIssuer = doc.nameIssuer?.toLowerCase().includes(q) || false;
+      const matchRfc = doc.rfcIssuer?.toLowerCase().includes(q) || false;
+      const matchDesc = doc.description.toLowerCase().includes(q);
+      return matchName || matchIssuer || matchRfc || matchDesc;
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6">
-      {/* Header and Explanation */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* View Header */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Mis Documentos y Comprobantes</h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Sube tus archivos CFDI (XML), representaciones impresas (PDF) o fotos de tickets (JPG/PNG).
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            Bóveda de Documentos Fiscales
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Carga y organiza tus facturas CFDI (XML) y recibos de nómina emitidos o recibidos.
           </p>
         </div>
-
-        {/* Upload Button */}
-        <div>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl flex items-center space-x-2 transition-colors shadow-xs"
+          >
+            <UploadCloud className="w-4 h-4" />
+            <span>Seleccionar Archivos XML</span>
+          </button>
           <input
             type="file"
             ref={fileInputRef}
-            onChange={e => e.target.files && processFiles(e.target.files)}
+            onChange={handleFileChange}
+            accept=".xml"
             multiple
-            accept=".xml,.pdf,.jpg,.jpeg,.png"
             className="hidden"
           />
+        </div>
+      </div>
+
+      {/* Drag & Drop Upload Zone */}
+      <div
+        onDragEnter={handleDrag}
+        onDragOver={handleDrag}
+        onDragLeave={handleDrag}
+        onDrop={handleDrop}
+        className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all ${
+          dragActive
+            ? 'border-blue-500 bg-blue-50/60'
+            : 'border-slate-300 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-400'
+        }`}
+      >
+        <div className="max-w-md mx-auto space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center mx-auto">
+            <UploadCloud className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-800">
+              Arrastra y suelta tus facturas XML del SAT aquí
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              Compatible con CFDI 4.0, 3.3, Nómina 1.2 y Pagos REP. Extracción automática de RFC, impuestos y deducciones.
+            </p>
+          </div>
           <button
+            type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-4 py-2.5 rounded-xl font-semibold text-xs transition shadow-sm disabled:opacity-50"
+            className="text-xs font-semibold text-blue-600 hover:text-blue-800 underline underline-offset-2"
           >
-            <UploadCloud className="w-4 h-4" />
-            <span>Seleccionar Archivos</span>
+            o explora en tu computadora
           </button>
         </div>
       </div>
 
-      {/* Drag & Drop Area */}
-      <div
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all ${
-          isDragging
-            ? 'border-blue-600 bg-blue-50/80 shadow-md scale-[1.005]'
-            : 'border-slate-300 bg-slate-50/60 hover:bg-slate-50'
-        }`}
-      >
-        <div className="max-w-md mx-auto space-y-3">
-          <div className="w-14 h-14 mx-auto rounded-2xl bg-blue-100 border border-blue-200 flex items-center justify-center text-blue-700 shadow-sm">
-            <UploadCloud className="w-7 h-7" />
+      {/* Notifications */}
+      {uploadError && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 flex items-start space-x-3 text-rose-800 text-xs">
+          <AlertTriangle className="w-5 h-5 shrink-0 text-rose-600" />
+          <div className="flex-1">
+            <p className="font-semibold">Aviso de carga</p>
+            <p className="mt-0.5">{uploadError}</p>
           </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-800">
-              Arrastra y suelta tus archivos aquí
-            </h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Soportamos formatos oficiales del SAT: <strong>XML (CFDI 4.0 / 3.3)</strong>, <strong>PDF</strong>, y comprobantes en <strong>JPG/PNG</strong>.
-            </p>
-          </div>
-          <div className="flex items-center justify-center gap-2 pt-1">
-            <span className="text-[10px] font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-600">.XML</span>
-            <span className="text-[10px] font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-600">.PDF</span>
-            <span className="text-[10px] font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-600">.JPG</span>
-            <span className="text-[10px] font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-600">.PNG</span>
-          </div>
-
-          {uploading && (
-            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 font-medium animate-pulse flex items-center justify-center gap-2">
-              <FileText className="w-4 h-4 text-blue-600" />
-              <span>{uploadProgress || 'Procesando documentos y comprobantes...'}</span>
-            </div>
-          )}
         </div>
-      </div>
+      )}
+      {uploadSuccess && (
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-start space-x-3 text-emerald-800 text-xs">
+          <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600" />
+          <div className="flex-1">
+            <p className="font-semibold">Procesamiento exitoso</p>
+            <p className="mt-0.5">{uploadSuccess}</p>
+          </div>
+        </div>
+      )}
 
-      {/* Filters and Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
+      {/* Filters & Search */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
         {/* Search */}
-        <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+        <div className="relative w-full sm:w-80">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Buscar por emisor, concepto o UUID..."
-            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar por emisor, RFC o descripción..."
+            className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
-        {/* Dropdowns */}
-        <div className="flex items-center gap-2 w-full md:w-auto">
+        {/* Category Filter */}
+        <div className="flex items-center space-x-2 w-full sm:w-auto">
+          <Filter className="w-4 h-4 text-slate-400" />
+          <span className="text-xs font-semibold text-slate-600">Tipo:</span>
           <select
             value={filterType}
-            onChange={e => setFilterType(e.target.value)}
-            className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none text-slate-700"
+            onChange={(e) => setFilterType(e.target.value)}
+            className="text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="all">Todas las categorías</option>
+            <option value="all">Todos los documentos ({documents.length})</option>
             <option value="payroll">Recibos de Nómina</option>
             <option value="invoice_received">Facturas Recibidas (Gastos)</option>
             <option value="invoice_issued">Facturas Emitidas (Ingresos)</option>
+            <option value="expense_receipt">Notas y Comprobantes</option>
             <option value="payment_complement">Complementos de Pago</option>
-            <option value="expense_receipt">Comprobantes de Gastos</option>
-          </select>
-
-          <select
-            value={filterStatus}
-            onChange={e => setFilterStatus(e.target.value)}
-            className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none text-slate-700"
-          >
-            <option value="all">Todos los estados</option>
-            <option value="processed">Procesado</option>
-            <option value="needs_review">Pendiente de revisión</option>
-            <option value="error">Con error</option>
           </select>
         </div>
       </div>
 
       {/* Documents Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-600">
-            <thead className="bg-slate-50 text-slate-700 uppercase font-bold text-[11px] border-b border-slate-200">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
               <tr>
-                <th className="px-4 py-3.5">Archivo / Emisor</th>
-                <th className="px-4 py-3.5">Tipo</th>
-                <th className="px-4 py-3.5">Fecha</th>
-                <th className="px-4 py-3.5">Total</th>
-                <th className="px-4 py-3.5">Deducibilidad / SAT</th>
-                <th className="px-4 py-3.5">Estado</th>
-                <th className="px-4 py-3.5 text-right">Acciones</th>
+                <th className="py-3 px-4">Documento</th>
+                <th className="py-3 px-4">Emisor / Receptor</th>
+                <th className="py-3 px-4">Fecha</th>
+                <th className="py-3 px-4">Tipo & Clasificación</th>
+                <th className="py-3 px-4 text-right">Subtotal</th>
+                <th className="py-3 px-4 text-right">Total</th>
+                <th className="py-3 px-4 text-center">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 text-slate-700">
               {filteredDocuments.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-slate-400">
-                    No hay documentos que coincidan con los filtros seleccionados.
+                  <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
+                    No se encontraron documentos en esta vista. Carga tus archivos XML arriba.
                   </td>
                 </tr>
               ) : (
-                filteredDocuments.map(doc => {
-                  const isXml = doc.fileType === 'xml';
-                  const isPdf = doc.fileType === 'pdf';
+                filteredDocuments.map((doc) => {
+                  const isPersonalDeduction = doc.cfdiUsage?.startsWith('D');
+                  const isCashWarning = doc.paymentForm === '01' && isPersonalDeduction;
+
                   return (
-                    <tr key={doc.id} className="hover:bg-slate-50/80 transition">
-                      {/* Name / Issuer */}
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center space-x-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
-                            isXml ? 'bg-amber-100 text-amber-800' : isPdf ? 'bg-rose-100 text-rose-800' : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {isXml ? <FileCode className="w-4 h-4" /> : isPdf ? <FileText className="w-4 h-4" /> : <Image className="w-4 h-4" />}
-                          </div>
+                    <tr key={doc.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4 font-medium text-slate-900">
+                        <div className="flex items-center space-x-2">
+                          <FileCode className="w-4 h-4 text-blue-600 shrink-0" />
                           <div>
-                            <span className="font-semibold text-slate-900 block truncate max-w-xs">{doc.name}</span>
-                            <span className="text-[11px] text-slate-500 block truncate max-w-xs">
-                              {doc.nameIssuer || 'Emisor no especificado'} {doc.rfcIssuer && `(${doc.rfcIssuer})`}
-                            </span>
+                            <p className="truncate max-w-[200px]" title={doc.name}>
+                              {doc.name}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-mono">
+                              {doc.uuid ? `${doc.uuid.slice(0, 18)}...` : 'Sin UUID'}
+                            </p>
                           </div>
                         </div>
                       </td>
-
-                      {/* Category */}
-                      <td className="px-4 py-3.5">
-                        <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md text-[11px] font-medium">
-                          {getCategoryLabel(doc.category)}
-                        </span>
+                      <td className="py-3.5 px-4">
+                        <p className="font-semibold text-slate-800 truncate max-w-[180px]">
+                          {doc.nameIssuer || doc.rfcIssuer || 'Emisor no especificado'}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-mono">
+                          RFC: {doc.rfcIssuer || 'N/A'}
+                        </p>
                       </td>
-
-                      {/* Date */}
-                      <td className="px-4 py-3.5 font-mono text-[11px] text-slate-600">
-                        {doc.issueDate ? doc.issueDate.slice(0, 10) : '-'}
+                      <td className="py-3.5 px-4 whitespace-nowrap text-slate-600">
+                        {(doc.issueDate || doc.createdAt).slice(0, 10)}
                       </td>
-
-                      {/* Total */}
-                      <td className="px-4 py-3.5 font-extrabold text-slate-900">
+                      <td className="py-3.5 px-4">
+                        <div className="flex flex-col gap-1 items-start">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                              doc.category === 'payroll'
+                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                : doc.category === 'invoice_issued'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : isPersonalDeduction
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-slate-100 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            {doc.category === 'payroll'
+                              ? 'Nómina Quincenal'
+                              : doc.category === 'invoice_issued'
+                              ? 'Ingreso Emitido'
+                              : isPersonalDeduction
+                              ? `Deducción Art. 151 (${doc.cfdiUsage})`
+                              : 'Gasto Recibido'}
+                          </span>
+                          {isCashWarning && (
+                            <span className="flex items-center space-x-1 text-[10px] text-rose-600 font-bold bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                              <ShieldAlert className="w-3 h-3" />
+                              <span>Efectivo (01) No Deducible</span>
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono text-slate-600">
+                        ${doc.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900">
                         ${doc.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                        {doc.currency && doc.currency !== 'MXN' && (
-                          <span className="text-[10px] text-slate-400 font-normal ml-1">{doc.currency}</span>
-                        )}
                       </td>
-
-                      {/* Tax classification */}
-                      <td className="px-4 py-3.5">
-                        {doc.cfdiUsage?.startsWith('D') ? (
-                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            Deducción personal ({doc.cfdiUsage})
-                          </span>
-                        ) : doc.category === 'payroll' ? (
-                          <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                            Nómina gravada
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-slate-500 truncate max-w-[150px] block">
-                            {doc.suggestedCategory}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-4 py-3.5">
-                        {doc.isDuplicate ? (
-                          <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                            <ShieldAlert className="w-3 h-3" />
-                            Duplicado detectado
-                          </span>
-                        ) : doc.status === 'processed' ? (
-                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                            <CheckCircle2 className="w-3 h-3" />
-                            Validado ({doc.confidence}%)
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                            <Clock className="w-3 h-3" />
-                            Por revisar
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-4 py-3.5 text-right">
-                        <div className="flex items-center justify-end space-x-1.5">
+                      <td className="py-3.5 px-4 text-center">
+                        <div className="flex items-center justify-center space-x-2">
                           <button
-                            onClick={() => handleOpenReview(doc)}
-                            title="Revisar o corregir datos extraídos"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-blue-700 hover:bg-blue-50 transition"
+                            onClick={() => setSelectedDoc(doc)}
+                            title="Ver detalles fiscales"
+                            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => onDeleteDocument(doc.id)}
                             title="Eliminar documento"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-700 hover:bg-rose-50 transition"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -498,167 +395,111 @@ export const DocumentsView: React.FC<DocumentsViewProps> = ({
         </div>
       </div>
 
-      {/* Review & Edit Modal */}
-      {reviewModalOpen && selectedDoc && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="bg-slate-900 text-white p-5 flex items-center justify-between">
+      {/* Document Detail & Tax Explanation Modal */}
+      {selectedDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div>
-                <h3 className="text-base font-bold">Revisión de Comprobante Fiscal</h3>
-                <p className="text-xs text-slate-400 font-mono mt-0.5">{selectedDoc.name}</p>
+                <h3 className="text-base font-bold text-slate-900">
+                  Detalles del Comprobante Fiscal
+                </h3>
+                <p className="text-xs text-slate-500 font-mono mt-0.5">
+                  UUID: {selectedDoc.uuid || 'N/A'}
+                </p>
               </div>
               <button
-                onClick={() => setReviewModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                onClick={() => setSelectedDoc(null)}
+                className="text-slate-400 hover:text-slate-600 text-lg font-bold p-1"
               >
-                <X className="w-5 h-5" />
+                ✕
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-4 flex-1">
-              {/* Duplicate or Confidence Warning */}
-              {selectedDoc.confidenceExplanation && (
-                <div className={`p-3.5 rounded-xl border text-xs flex items-start gap-2.5 ${
-                  selectedDoc.isDuplicate
-                    ? 'bg-rose-50 border-rose-200 text-rose-800'
-                    : 'bg-blue-50 border-blue-200 text-blue-900'
-                }`}>
-                  <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-bold block">Diagnóstico del análisis:</span>
-                    <span className="leading-relaxed mt-0.5 block">{selectedDoc.confidenceExplanation}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Editable Fields Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Nombre del Emisor</label>
-                  <input
-                    type="text"
-                    value={selectedDoc.nameIssuer || ''}
-                    onChange={e => setSelectedDoc({ ...selectedDoc, nameIssuer: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border rounded-xl focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">RFC del Emisor</label>
-                  <input
-                    type="text"
-                    value={selectedDoc.rfcIssuer || ''}
-                    onChange={e => setSelectedDoc({ ...selectedDoc, rfcIssuer: e.target.value.toUpperCase() })}
-                    className="w-full px-3 py-2 text-xs border rounded-xl font-mono uppercase focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Importe Total ($)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={selectedDoc.total || 0}
-                    onChange={e => setSelectedDoc({ ...selectedDoc, total: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 text-xs border rounded-xl font-bold focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">ISR Retenido ($)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={selectedDoc.taxIsrRetained || 0}
-                    onChange={e => setSelectedDoc({ ...selectedDoc, taxIsrRetained: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 text-xs border rounded-xl font-bold text-blue-700 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de Comprobante</label>
-                  <input
-                    type="date"
-                    value={selectedDoc.issueDate ? selectedDoc.issueDate.slice(0, 10) : ''}
-                    onChange={e => setSelectedDoc({ ...selectedDoc, issueDate: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border rounded-xl focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Uso de CFDI</label>
-                  <input
-                    type="text"
-                    value={selectedDoc.cfdiUsage || ''}
-                    onChange={e => setSelectedDoc({ ...selectedDoc, cfdiUsage: e.target.value.toUpperCase() })}
-                    placeholder="Ej. G03 o D01"
-                    className="w-full px-3 py-2 text-xs border rounded-xl font-mono uppercase focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+            {/* General Info */}
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <p className="text-slate-500 font-semibold">Emisor</p>
+                <p className="font-bold text-slate-900 mt-0.5">{selectedDoc.nameIssuer}</p>
+                <p className="font-mono text-slate-600">{selectedDoc.rfcIssuer}</p>
               </div>
-
-              {/* UUID */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Folio Fiscal UUID (SAT)</label>
-                <input
-                  type="text"
-                  value={selectedDoc.uuid || ''}
-                  onChange={e => setSelectedDoc({ ...selectedDoc, uuid: e.target.value })}
-                  placeholder="SAT UUID"
-                  className="w-full px-3 py-2 text-xs border rounded-xl font-mono focus:ring-2 focus:ring-blue-500"
-                />
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <p className="text-slate-500 font-semibold">Receptor</p>
+                <p className="font-bold text-slate-900 mt-0.5">{selectedDoc.nameReceiver || profile.taxName}</p>
+                <p className="font-mono text-slate-600">{selectedDoc.rfcReceiver || profile.rfc}</p>
               </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Concepto o Descripción</label>
-                <textarea
-                  value={selectedDoc.description || ''}
-                  onChange={e => setSelectedDoc({ ...selectedDoc, description: e.target.value })}
-                  rows={2}
-                  className="w-full px-3 py-2 text-xs border rounded-xl focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Nómina Details Preview if applicable */}
-              {selectedDoc.payrollDetails && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
-                  <h4 className="text-xs font-bold text-slate-800">Desglose de Nómina Timbrada</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                    <div>
-                      <span className="text-slate-500 block">Sueldo Bruto:</span>
-                      <strong className="text-slate-800">${selectedDoc.payrollDetails.totalPerceptions.toLocaleString('es-MX')}</strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block">Deducciones:</span>
-                      <strong className="text-slate-800">${selectedDoc.payrollDetails.totalDeductions.toLocaleString('es-MX')}</strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block">ISR Retenido:</span>
-                      <strong className="text-blue-700">${selectedDoc.payrollDetails.isrRetained.toLocaleString('es-MX')}</strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block">Neto Pagado:</span>
-                      <strong className="text-emerald-700">${selectedDoc.payrollDetails.netPaid.toLocaleString('es-MX')}</strong>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+            {/* Concept and Description */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+              <p className="text-slate-500 font-semibold">Conceptos / Descripción</p>
+              <p className="text-slate-800 mt-1 leading-relaxed">{selectedDoc.description}</p>
+            </div>
+
+            {/* Tax Breakdown */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <p className="text-slate-500 font-medium">Subtotal</p>
+                <p className="text-sm font-bold text-slate-900 mt-1 font-mono">
+                  ${selectedDoc.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <p className="text-slate-500 font-medium">IVA Trasladado</p>
+                <p className="text-sm font-bold text-slate-900 mt-1 font-mono">
+                  ${selectedDoc.taxIva.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <p className="text-slate-500 font-medium">ISR Retenido</p>
+                <p className="text-sm font-bold text-amber-700 mt-1 font-mono">
+                  ${selectedDoc.taxIsrRetained.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div className="p-3 bg-blue-50 rounded-xl border border-blue-200">
+                <p className="text-blue-700 font-medium">Total Factura</p>
+                <p className="text-sm font-bold text-blue-900 mt-1 font-mono">
+                  ${selectedDoc.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+
+            {/* Payroll specific details if applicable */}
+            {selectedDoc.payrollDetails && (
+              <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs space-y-2">
+                <p className="font-bold text-indigo-900">Complemento de Nómina Oficial</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-indigo-800">
+                  <p>Días pagados: <span className="font-semibold">{selectedDoc.payrollDetails.daysPaid}</span></p>
+                  <p>Percepciones: <span className="font-semibold">${selectedDoc.payrollDetails.totalPerceptions.toLocaleString('es-MX')}</span></p>
+                  <p>Deducciones patronales: <span className="font-semibold">${selectedDoc.payrollDetails.totalDeductions.toLocaleString('es-MX')}</span></p>
+                  <p>ISR Retenido: <span className="font-semibold">${selectedDoc.payrollDetails.isrRetained.toLocaleString('es-MX')}</span></p>
+                  <p>Neto pagado: <span className="font-semibold">${selectedDoc.payrollDetails.netPaid.toLocaleString('es-MX')}</span></p>
+                </div>
+              </div>
+            )}
+
+            {/* SAT Fiscal Analysis */}
+            <div className="p-4 bg-blue-50/80 border border-blue-200 rounded-xl text-xs space-y-2">
+              <div className="flex items-center space-x-2 text-blue-900 font-bold">
+                <ShieldAlert className="w-4 h-4 text-blue-700" />
+                <span>Análisis Fiscal & Requisitos del SAT</span>
+              </div>
+              <p className="text-blue-800 leading-relaxed">
+                {selectedDoc.confidenceExplanation || 'Comprobante verificado con estructura oficial CFDI.'}
+              </p>
+              <div className="flex items-center space-x-4 pt-1 text-[11px] text-blue-700 font-medium">
+                <span>Método de pago: <strong>{selectedDoc.paymentMethod || 'PUE'}</strong></span>
+                <span>Forma de pago: <strong>{selectedDoc.paymentForm || '03'}</strong></span>
+                <span>Uso CFDI: <strong>{selectedDoc.cfdiUsage || 'G03'}</strong></span>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
               <button
-                onClick={() => setReviewModalOpen(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition"
+                onClick={() => setSelectedDoc(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl transition-colors"
               >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSaveReview}
-                className="px-5 py-2.5 bg-blue-700 text-white rounded-xl text-xs font-bold hover:bg-blue-800 transition shadow-sm"
-              >
-                Guardar y Validar Datos
+                Cerrar
               </button>
             </div>
           </div>

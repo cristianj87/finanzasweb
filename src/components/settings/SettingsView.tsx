@@ -1,254 +1,286 @@
 import React, { useState } from 'react';
-import { TaxProfile, FISCAL_REGIMES, FiscalRegimeCode } from '../../types';
 import {
   Settings,
   User,
-  Building2,
-  Trash2,
-  Sparkles,
-  Save,
-  CheckCircle2,
-  AlertTriangle,
-  Database,
   ShieldCheck,
+  CheckCircle2,
+  RotateCcw,
+  Trash2,
+  Building2,
+  Calendar,
+  AlertCircle,
+  Save,
 } from 'lucide-react';
+import { TaxProfile, FISCAL_REGIMES, FiscalRegimeCode } from '../../types';
 
 interface SettingsViewProps {
-  profile: TaxProfile | null;
-  onUpdateProfile: (profile: TaxProfile) => Promise<void>;
-  onLoadDemo: () => void;
-  onClearAllData: () => Promise<void>;
-  isDemoActive: boolean;
+  profile: TaxProfile;
+  onUpdateProfile: (profile: TaxProfile) => void;
+  onResetDemoData: () => void;
+  onClearAllData: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   profile,
   onUpdateProfile,
-  onLoadDemo,
+  onResetDemoData,
   onClearAllData,
-  isDemoActive,
 }) => {
-  const [taxName, setTaxName] = useState(profile?.taxName || '');
-  const [rfc, setRfc] = useState(profile?.rfc || '');
-  const [fiscalYear, setFiscalYear] = useState<number>(profile?.fiscalYear || 2025);
-  const [selectedRegimes, setSelectedRegimes] = useState<FiscalRegimeCode[]>(profile?.regimes || ['605']);
-  const [hasPayroll, setHasPayroll] = useState(profile?.hasPayroll ?? true);
-  const [issuesInvoices, setIssuesInvoices] = useState(profile?.issuesInvoices ?? false);
-  const [makesProvisionalPayments, setMakesProvisionalPayments] = useState(profile?.makesProvisionalPayments ?? false);
-  const [savedSuccess, setSavedSuccess] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [formData, setFormData] = useState<TaxProfile>(profile);
+  const [savedNotification, setSavedNotification] = useState(false);
 
-  const toggleRegime = (code: FiscalRegimeCode) => {
-    if (selectedRegimes.includes(code)) {
-      if (selectedRegimes.length > 1) {
-        setSelectedRegimes(selectedRegimes.filter(c => c !== code));
-      }
-    } else {
-      setSelectedRegimes([...selectedRegimes, code]);
-    }
-  };
+  const handleRegimeToggle = (code: FiscalRegimeCode) => {
+    setFormData((prev) => {
+      const exists = prev.regimes.includes(code);
+      const newRegimes = exists
+        ? prev.regimes.filter((r) => r !== code)
+        : [...prev.regimes, code];
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!profile) return;
-    setIsSaving(true);
-    try {
-      const updated: TaxProfile = {
-        ...profile,
-        taxName: taxName.trim(),
-        rfc: rfc.trim().toUpperCase(),
-        fiscalYear,
-        regimes: selectedRegimes,
+      // Auto update flags based on regimes
+      const hasPayroll = newRegimes.includes('605');
+      const issuesInvoices = newRegimes.some((r) => ['612', '626', '606', '625'].includes(r));
+      const makesProvisional = newRegimes.some((r) => ['612', '626', '606', '625'].includes(r));
+
+      return {
+        ...prev,
+        regimes: newRegimes.length > 0 ? newRegimes : ['605'],
         hasPayroll,
         issuesInvoices,
-        makesProvisionalPayments,
-        updatedAt: new Date().toISOString(),
+        makesProvisionalPayments: makesProvisional,
       };
-      await onUpdateProfile(updated);
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3000);
-    } catch (e) {
-      console.error('Error saving settings:', e);
-    } finally {
-      setIsSaving(false);
-    }
+    });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdateProfile(formData);
+    setSavedNotification(true);
+    setTimeout(() => setSavedNotification(false), 3000);
   };
 
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Header */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Configuración del Contribuyente</h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Administra tus regímenes del SAT, obligaciones fiscales y almacenamiento de datos.
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            Perfil y Configuración Fiscal
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Administra tus datos como Persona Física, tus regímenes SAT y obligaciones tributarias.
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {savedSuccess && (
-            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 animate-bounce">
-              <CheckCircle2 className="w-4 h-4" />
-              ¡Guardado exitosamente!
-            </span>
-          )}
         </div>
       </div>
 
-      <form onSubmit={handleSave} className="space-y-6">
-        {/* Profile Card */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <User className="w-4 h-4 text-blue-700" />
+      {savedNotification && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center space-x-2 text-emerald-800 text-xs font-semibold">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+          <span>¡Configuración fiscal actualizada correctamente!</span>
+        </div>
+      )}
+
+      {/* Form */}
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Contribuyente */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div className="flex items-center space-x-2 border-b border-slate-100 pb-3">
+            <User className="w-5 h-5 text-blue-600" />
             <h2 className="text-sm font-bold text-slate-900">Datos Generales del Contribuyente</h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Nombre Completo *</label>
+              <label className="block font-semibold text-slate-700 mb-1">Nombre Completo</label>
               <input
                 type="text"
                 required
-                value={taxName}
-                onChange={e => setTaxName(e.target.value)}
-                className="w-full px-3.5 py-2 text-xs border rounded-xl focus:ring-2 focus:ring-blue-500"
+                value={formData.taxName}
+                onChange={(e) => setFormData({ ...formData, taxName: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                placeholder="Nombre del contribuyente"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">RFC (Persona Física)</label>
+              <label className="block font-semibold text-slate-700 mb-1">RFC (Persona Física)</label>
               <input
                 type="text"
-                value={rfc}
-                onChange={e => setRfc(e.target.value.toUpperCase())}
-                placeholder="Ej. ABCD900101XYZ"
-                className="w-full px-3.5 py-2 text-xs border rounded-xl font-mono uppercase focus:ring-2 focus:ring-blue-500"
+                value={formData.rfc}
+                onChange={(e) => setFormData({ ...formData, rfc: e.target.value.toUpperCase() })}
+                maxLength={13}
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono uppercase focus:ring-2 focus:ring-blue-500"
+                placeholder="XXXX000000XXX"
               />
+              <p className="text-[10px] text-slate-400 mt-1">
+                4 letras, 6 números (AAMMDD) y 3 caracteres de homoclave.
+              </p>
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Ejercicio Fiscal Predeterminado</label>
-            <select
-              value={fiscalYear}
-              onChange={e => setFiscalYear(Number(e.target.value))}
-              className="w-full sm:w-60 px-3.5 py-2 text-xs border rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
-            >
-              <option value={2026}>Ejercicio 2026</option>
-              <option value={2025}>Ejercicio 2025</option>
-              <option value={2024}>Ejercicio 2024</option>
-            </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">País de Residencia Fiscal</label>
+              <input
+                type="text"
+                disabled
+                value="México"
+                className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-slate-600 cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Ejercicio Fiscal Primario</label>
+              <select
+                value={formData.fiscalYear}
+                onChange={(e) => setFormData({ ...formData, fiscalYear: Number(e.target.value) })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+              >
+                <option value={2024}>2024</option>
+                <option value={2025}>2025</option>
+                <option value={2026}>2026</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        {/* Regimes Card */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <Building2 className="w-4 h-4 text-blue-700" />
-            <h2 className="text-sm font-bold text-slate-900">Regímenes Fiscales Registrados ante el SAT</h2>
+        {/* Regímenes SAT */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center space-x-2">
+              <Building2 className="w-5 h-5 text-blue-600" />
+              <h2 className="text-sm font-bold text-slate-900">
+                Regímenes Fiscales Registrados ante el SAT
+              </h2>
+            </div>
+            <span className="text-xs text-slate-500">Puedes seleccionar varios</span>
           </div>
+
           <p className="text-xs text-slate-500">
-            Selecciona todos los regímenes bajo los cuales tributas actualmente en el SAT:
+            En México una persona física puede tributar en más de un régimen de ingresos simultáneamente (por ejemplo: asalariado con honorarios o inversiones).
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {FISCAL_REGIMES.map(regime => {
-              const isSelected = selectedRegimes.includes(regime.code);
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            {FISCAL_REGIMES.map((regime) => {
+              const isSelected = formData.regimes.includes(regime.code);
               return (
                 <div
                   key={regime.code}
-                  onClick={() => toggleRegime(regime.code)}
-                  className={`p-3.5 rounded-xl border cursor-pointer transition ${
+                  onClick={() => handleRegimeToggle(regime.code)}
+                  className={`p-4 rounded-xl border cursor-pointer transition-all ${
                     isSelected
-                      ? 'bg-blue-50/70 border-blue-500 ring-1 ring-blue-500/20'
-                      : 'border-slate-200 hover:bg-slate-50'
+                      ? 'border-blue-500 bg-blue-50/50 shadow-xs'
+                      : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className="font-semibold text-xs text-slate-900 block">{regime.shortName}</span>
-                      <span className="text-[10px] text-slate-400 font-mono">Clave {regime.code}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-800">
+                        Clave {regime.code}
+                      </span>
+                      <p className="font-bold text-slate-900 mt-1">{regime.shortName}</p>
                     </div>
-                    {isSelected && <CheckCircle2 className="w-4 h-4 text-blue-600 flex-shrink-0" />}
+                    <div
+                      className={`w-5 h-5 rounded-md flex items-center justify-center border ${
+                        isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 bg-white'
+                      }`}
+                    >
+                      {isSelected && '✓'}
+                    </div>
                   </div>
+                  <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
+                    {regime.description}
+                  </p>
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* Obligations Card */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-          <h2 className="text-sm font-bold text-slate-900">Configuración de Comprobantes Habituales</h2>
-          <div className="space-y-2">
-            <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer">
+        {/* Declaraciones y Obligaciones */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div className="flex items-center space-x-2 border-b border-slate-100 pb-3">
+            <ShieldCheck className="w-5 h-5 text-emerald-600" />
+            <h2 className="text-sm font-bold text-slate-900">Obligaciones & Características</h2>
+          </div>
+
+          <div className="space-y-3 text-xs">
+            <label className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
+              <div>
+                <span className="font-bold text-slate-900">Recibe Recibos de Nómina timbrados</span>
+                <p className="text-slate-500 text-[11px]">Trabajas como empleado bajo contrato laboral.</p>
+              </div>
               <input
                 type="checkbox"
-                checked={hasPayroll}
-                onChange={e => setHasPayroll(e.target.checked)}
-                className="w-4 h-4 text-blue-600 rounded"
+                checked={formData.hasPayroll}
+                onChange={(e) => setFormData({ ...formData, hasPayroll: e.target.checked })}
+                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
               />
-              <span>Tengo recibos de nómina timbrados por uno o más empleadores</span>
             </label>
-            <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer">
+
+            <label className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
+              <div>
+                <span className="font-bold text-slate-900">Emite facturas por actividades o servicios</span>
+                <p className="text-slate-500 text-[11px]">Generas CFDI de ingresos a clientes o empresas.</p>
+              </div>
               <input
                 type="checkbox"
-                checked={issuesInvoices}
-                onChange={e => setIssuesInvoices(e.target.checked)}
-                className="w-4 h-4 text-blue-600 rounded"
+                checked={formData.issuesInvoices}
+                onChange={(e) => setFormData({ ...formData, issuesInvoices: e.target.checked })}
+                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
               />
-              <span>Emito facturas electrónicas CFDI por honorarios, actividades o rentas</span>
             </label>
-            <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer">
+
+            <label className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
+              <div>
+                <span className="font-bold text-slate-900">Presenta Pagos Provisionales de ISR</span>
+                <p className="text-slate-500 text-[11px]">Presentas declaraciones mensuales a cuenta del impuesto anual.</p>
+              </div>
               <input
                 type="checkbox"
-                checked={makesProvisionalPayments}
-                onChange={e => setMakesProvisionalPayments(e.target.checked)}
-                className="w-4 h-4 text-blue-600 rounded"
+                checked={formData.makesProvisionalPayments}
+                onChange={(e) => setFormData({ ...formData, makesProvisionalPayments: e.target.checked })}
+                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
               />
-              <span>Realizo pagos provisionales de ISR o declaraciones mensuales de IVA</span>
             </label>
           </div>
         </div>
 
+        {/* Submit */}
         <div className="flex justify-end">
           <button
             type="submit"
-            disabled={isSaving}
-            className="flex items-center gap-2 px-6 py-2.5 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50"
+            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl flex items-center space-x-2 transition-colors shadow-xs"
           >
             <Save className="w-4 h-4" />
-            <span>{isSaving ? 'Guardando...' : 'Guardar Cambios del Perfil'}</span>
+            <span>Guardar Configuración Fiscal</span>
           </button>
         </div>
       </form>
 
-      {/* Danger Zone / Data Management */}
-      <div className="bg-white p-6 rounded-2xl border border-rose-200 shadow-sm space-y-4">
-        <h2 className="text-sm font-bold text-rose-900 flex items-center gap-2">
-          <Database className="w-4 h-4 text-rose-600" />
-          Gestión de Datos y Entorno de Pruebas
-        </h2>
-        <p className="text-xs text-slate-600 leading-relaxed">
-          Puedes recargar en cualquier momento el perfil de demostración mexicano ("Carlos Morales Sandoval") para explorar todas las gráficas y reportes, o vaciar toda la información para comenzar desde cero con tus propios CFDI reales.
+      {/* Danger Zone / Reset */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+        <h2 className="text-sm font-bold text-slate-900">Gestión de Datos Locales</h2>
+        <p className="text-xs text-slate-500">
+          Puedes recargar en cualquier momento los datos de prueba de Carlos Morales Sandoval o limpiar la base de datos local para ingresar tus propios comprobantes.
         </p>
 
         <div className="flex flex-wrap items-center gap-3 pt-2">
           <button
             type="button"
-            onClick={onLoadDemo}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition"
+            onClick={onResetDemoData}
+            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl flex items-center space-x-1.5 transition-colors border border-slate-200"
           >
-            <Sparkles className="w-4 h-4 text-blue-600" />
-            <span>Recargar Datos de Ejemplo (DEMO)</span>
+            <RotateCcw className="w-4 h-4" />
+            <span>Restablecer Datos de Demostración</span>
           </button>
 
           <button
             type="button"
             onClick={onClearAllData}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 transition"
+            className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold rounded-xl flex items-center space-x-1.5 transition-colors border border-rose-200"
           >
             <Trash2 className="w-4 h-4 text-rose-600" />
-            <span>Eliminar Todos mis Datos y Comprobantes</span>
+            <span>Borrar Todos los Datos Locales</span>
           </button>
         </div>
       </div>

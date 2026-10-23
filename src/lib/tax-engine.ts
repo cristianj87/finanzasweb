@@ -1,8 +1,5 @@
 import { Transaction, TaxProfile } from '../types';
 
-// Valor estimado de la UMA anual en México
-// 2024: $39,606.36 * 5 = $198,031.80
-// 2025: ~$41,600 * 5 = ~$208,000.00
 export const UMA_ANUAL_2024 = 39606.36;
 export const UMA_ANUAL_2025 = 41600.00;
 
@@ -11,25 +8,22 @@ export interface TaxCalculationBreakdown {
   grossIncome: number;
   exemptIncome: number;
   taxableIncome: number;
-  // Deducciones
-  authorizedDeductions: number; // Actividad profesional / empresarial
-  grossPersonalDeductions: number; // Total antes de topes
+  authorizedDeductions: number;
+  grossPersonalDeductions: number;
   umaLimit5x: number;
   percentageLimit15: number;
   applicablePersonalDeductionsLimit: number;
-  netPersonalDeductions: number; // Deducciones personales aplicables con tope
-  taxBase: number; // Base gravable
-  // Impuesto
-  estimatedAnnualTax: number; // ISR causado
-  isrWithheld: number; // ISR retenido por patrones o clientes
-  isrProvisionalPayments: number; // Pagos provisionales realizados
-  estimatedBalance: number; // Negativo: Saldo a favor estimado | Positivo: Saldo a cargo
+  netPersonalDeductions: number;
+  taxBase: number;
+  estimatedAnnualTax: number;
+  isrWithheld: number;
+  isrProvisionalPayments: number;
+  estimatedBalance: number;
   isRefundEstimated: boolean;
   notes: string[];
   regimesNotes: string[];
 }
 
-// Tarifa anual de ISR para personas físicas (Artículo 152 LISR)
 interface ISRBracket {
   lowerLimit: number;
   upperLimit: number;
@@ -65,7 +59,6 @@ export function calculateAnnualTax(
     return tYear === year;
   });
 
-  // Ingresos
   let grossIncome = 0;
   let isrWithheld = 0;
   let isrProvisionalPayments = 0;
@@ -77,7 +70,6 @@ export function calculateAnnualTax(
     }
   });
 
-  // Gastos
   let authorizedDeductions = 0;
   let grossPersonalDeductions = 0;
 
@@ -91,39 +83,33 @@ export function calculateAnnualTax(
     }
   });
 
-  // Regímenes
   const hasResico = profile.regimes.includes('626');
   const hasPayroll = profile.regimes.includes('605');
   const hasProfessional = profile.regimes.includes('612');
 
   if (hasResico) {
-    regimesNotes.push('Régimen RESICO: Recuerda que para RESICO no aplican las deducciones personales del Art. 151 en la declaración anual, ya que tributa con tasa reducida directa.');
+    regimesNotes.push('Régimen RESICO: Para RESICO no aplican las deducciones personales del Art. 151 en la declaración anual, ya que tributa con tasa fija reducida.');
   }
   if (hasPayroll) {
-    regimesNotes.push('Sueldos y Salarios: Si solo tuviste un patrón durante el año y tus ingresos no superaron $400,000, la declaración anual puede ser opcional, salvo que desees deducir gastos personales para generar saldo a favor.');
+    regimesNotes.push('Sueldos y Salarios: Si solo tuviste un patrón y tus ingresos no superaron $400,000, la anual puede ser opcional, salvo que desees deducir gastos personales.');
   }
   if (hasProfessional) {
-    regimesNotes.push('Servicios Profesionales: Puedes aplicar tanto deducciones autorizadas de tus actividades como deducciones personales en la anual.');
+    regimesNotes.push('Servicios Profesionales: Puedes aplicar deducciones autorizadas de tus actividades y deducciones personales en la anual.');
   }
 
-  // Límites de deducciones personales (Art. 151 LISR):
-  // Menor entre 5 UMAs anuales o el 15% del total de ingresos
   const umaLimit5x = umaAnual * 5;
   const percentageLimit15 = grossIncome * 0.15;
   const applicablePersonalDeductionsLimit = Math.min(umaLimit5x, percentageLimit15);
-
   const netPersonalDeductions = Math.min(grossPersonalDeductions, applicablePersonalDeductionsLimit);
 
   if (grossPersonalDeductions > applicablePersonalDeductionsLimit && grossIncome > 0) {
     notes.push(`Tus deducciones personales ($${grossPersonalDeductions.toLocaleString('es-MX', { minimumFractionDigits: 2 })}) superan el tope legal del 15% de ingresos ($${applicablePersonalDeductionsLimit.toLocaleString('es-MX', { minimumFractionDigits: 2 })}). Se aplicó el tope legal.`);
   }
 
-  // Base gravable
-  const exemptIncome = 0; // Exenciones de aguinaldo/prima se calculan si hay desglose
+  const exemptIncome = 0;
   const taxableIncome = Math.max(0, grossIncome - authorizedDeductions);
   const taxBase = Math.max(0, taxableIncome - (hasResico ? 0 : netPersonalDeductions));
 
-  // Tarifa Art. 152
   let estimatedAnnualTax = 0;
   if (taxBase > 0) {
     const bracket = ANNUAL_ISR_BRACKETS.find(
@@ -136,16 +122,14 @@ export function calculateAnnualTax(
     }
   }
 
-  // Saldo: Impuesto causado - Retenciones - Pagos provisionales
-  // Si da negativo, el resultado es a favor del contribuyente
   const rawBalance = estimatedAnnualTax - isrWithheld - isrProvisionalPayments;
   const estimatedBalance = Math.round(rawBalance * 100) / 100;
   const isRefundEstimated = estimatedBalance < 0;
 
   if (isRefundEstimated) {
-    notes.push(`Estimación favorable: Tienes un posible saldo a favor de $${Math.abs(estimatedBalance).toLocaleString('es-MX', { minimumFractionDigits: 2 })} debido a que las retenciones superaron el ISR causado.`);
+    notes.push(`Estimación favorable: Tienes un posible saldo a favor de $${Math.abs(estimatedBalance).toLocaleString('es-MX', { minimumFractionDigits: 2 })}.`);
   } else if (estimatedBalance > 0) {
-    notes.push(`Estimación de impuesto a pagar: $${estimatedBalance.toLocaleString('es-MX', { minimumFractionDigits: 2 })}. Verifica si cuentas con deducciones personales pendientes de registrar.`);
+    notes.push(`Estimación de impuesto a pagar: $${estimatedBalance.toLocaleString('es-MX', { minimumFractionDigits: 2 })}.`);
   }
 
   return {
